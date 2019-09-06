@@ -568,6 +568,7 @@ end subroutine check_energy_get_integrals
   subroutine check_energy_gmean(state, pbuf2d, dtime, nstep)
 
     use physics_buffer, only : physics_buffer_desc, pbuf_get_field, pbuf_get_chunk
+    use phys_grid,      only : get_ncols_p
     
 !-----------------------------------------------------------------------
 ! Compute global mean total energy of physics input and output states
@@ -593,7 +594,7 @@ end subroutine check_energy_get_integrals
     ! Copy total energy out of input and output states
 !DIR$ CONCURRENT
     do lchnk = begchunk, endchunk
-       ncol = state(lchnk)%ncol
+       ncol = get_ncols_p(lchnk)
        ! input energy
        te(:ncol,lchnk,1) = state(lchnk)%te_ini(:ncol)
        ! output energy
