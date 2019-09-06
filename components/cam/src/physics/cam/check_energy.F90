@@ -35,6 +35,7 @@ module check_energy
   use cam_logfile,     only: iulog
   use cam_abortutils,  only: endrun 
   use phys_control,    only: ieflx_opt
+  use shr_infnan_mod, only : shr_infnan_isnan
 
   implicit none
   private
@@ -238,6 +239,7 @@ end subroutine check_energy_get_integrals
 
   subroutine check_energy_timestep_init(state, tend, pbuf, col_type)
     use physics_buffer, only : physics_buffer_desc, pbuf_set_field
+    use shr_sys_mod,    only : shr_sys_abort
 !-----------------------------------------------------------------------
 ! Compute initial values of energy and water integrals, 
 ! zero cumulative tendencies
@@ -266,6 +268,7 @@ end subroutine check_energy_get_integrals
     real(r8) :: ws(state%ncol)                     ! vertical integral of snow
     integer :: ixrain
     integer :: ixsnow
+    integer :: tid, omp_get_thread_num
 !-----------------------------------------------------------------------
 
     lchnk = state%lchnk
@@ -298,6 +301,8 @@ end subroutine check_energy_get_integrals
     wr = 0._r8
     ws = 0._r8
 
+    tid = 0
+    tid = omp_get_thread_num()
     do k = 1, pver
        do i = 1, ncol
           ke(i) = ke(i) + 0.5_r8*(state%u(i,k)**2 + state%v(i,k)**2)*state%pdel(i,k)/gravit
@@ -305,6 +310,18 @@ end subroutine check_energy_get_integrals
 !!! cam6  se(i) = se(i) +         state%t(i,k)*cpairv_loc(i,k,lchnk)*state%pdel(i,k)/gravit
           wv(i) = wv(i) + state%q(i,k,1       )*state%pdel(i,k)/gravit
        end do
+       if (any(shr_infnan_isnan(ke(:) ))) then
+          write (*,*) "ke",tid,ncol,pver,k,state%u(:,k),state%v(:,k),state%pdel(:,k),gravit
+          call shr_sys_abort("check_energy_timestep_init ERROR: NaNs or INFs in input state")
+       endif
+       if (any(shr_infnan_isnan(se(:) ))) then
+          write (*,*) "se",tid,ncol,pver,k,state%s(:,k),state%pdel(:,k),gravit
+          call shr_sys_abort("check_energy_timestep_init ERROR: NaNs or INFs in input state")
+       endif
+       if (any(shr_infnan_isnan(wv(:) ))) then
+          write (*,*) "wv",tid,ncol,pver,k,state%q(:,k,1),state%pdel(:,k),gravit
+          call shr_sys_abort("check_energy_timestep_init ERROR: NaNs or INFs in input state")
+       endif
     end do
 !!! cam6    do i = 1, ncol
 !!! cam6       se(i) = se(i) + state%phis(i)*state%ps(i)/gravit
@@ -317,6 +334,12 @@ end subroutine check_energy_get_integrals
              wl(i) = wl(i) + state%q(i,k,ixcldliq)*state%pdel(i,k)/gravit
              wi(i) = wi(i) + state%q(i,k,ixcldice)*state%pdel(i,k)/gravit
           end do
+          if (any(shr_infnan_isnan(wl(:) ))) then
+             write (*,*) "wl",tid,ncol,pver,k,ixcldliq,state%q(:,k,ixcldliq),state%pdel(:,k),gravit
+          endif
+          if (any(shr_infnan_isnan(wi(:) ))) then
+             write (*,*) "wi",tid,ncol,pver,k,ixcldice,state%q(:,k,ixcldice),state%pdel(:,k),gravit
+          endif
        end do
     end if
 
@@ -326,6 +349,12 @@ end subroutine check_energy_get_integrals
              wr(i) = wr(i) + state%q(i,k,ixrain)*state%pdel(i,k)/gravit
              ws(i) = ws(i) + state%q(i,k,ixsnow)*state%pdel(i,k)/gravit
           end do
+          if (any(shr_infnan_isnan(wr(:) ))) then
+             write (*,*) "wr",tid,ncol,pver,k,ixrain,state%q(:,k,ixrain),state%pdel(:,k),gravit
+          endif
+          if (any(shr_infnan_isnan(ws(:) ))) then
+             write (*,*) "ws",tid,ncol,pver,k,ixsnow,state%q(:,k,ixsnow),state%pdel(:,k),gravit
+          endif
        end do
     end if
 
@@ -339,6 +368,9 @@ end subroutine check_energy_get_integrals
        state%te_cur(i) = state%te_ini(i)
        state%tw_cur(i) = state%tw_ini(i)
     end do
+    if (any(shr_infnan_isnan(state%te_ini(:) ))) then
+       write (*,*) "check_energy_timestep_init",tid,ncol,state%te_ini(:),se(:),ke(:),wv(:),wl(:),wr(:)
+    endif
 
 ! zero cummulative boundary fluxes 
     tend%te_tnd(:ncol) = 0._r8
@@ -589,20 +621,31 @@ end subroutine check_energy_get_integrals
                                          ! total energy of input/output states (copy)
     real(r8) :: te_glob(3)               ! global means of total energy
     real(r8), pointer :: teout(:)
+    integer :: tid, omp_get_thread_num
 !-----------------------------------------------------------------------
 
     ! Copy total energy out of input and output states
+    tid = omp_get_thread_num()
 !DIR$ CONCURRENT
     do lchnk = begchunk, endchunk
        ncol = get_ncols_p(lchnk)
        ! input energy
        te(:ncol,lchnk,1) = state(lchnk)%te_ini(:ncol)
+       if (any(shr_infnan_isnan(te(:ncol,lchnk,1)))) then
+          write (*,*) "1",tid,ncol,lchnk,te(:ncol,lchnk,1)
+       endif
        ! output energy
        call pbuf_get_field(pbuf_get_chunk(pbuf2d,lchnk),teout_idx, teout)
 
        te(:ncol,lchnk,2) = teout(1:ncol)
+       if (any(shr_infnan_isnan(te(:ncol,lchnk,2)))) then
+          write (*,*) "2",tid,ncol,lchnk,te(:ncol,lchnk,2)
+       endif
        ! surface pressure for heating rate
        te(:ncol,lchnk,3) = state(lchnk)%pint(:ncol,pver+1)
+       if (any(shr_infnan_isnan(te(:ncol,lchnk,3)))) then
+          write (*,*) "3",tid,ncol,lchnk,te(:ncol,lchnk,3)
+       endif
     end do
 
     ! Compute global means of input and output energies and of
