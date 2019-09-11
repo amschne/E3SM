@@ -33,7 +33,7 @@ module clm_varpar
   integer            :: nlevtrc_soil
   integer            :: nlevtrc_full
   
-  integer, parameter :: nlevsno     =   5     ! maximum number of snow layers
+  integer, parameter :: nlevsno     =   16     ! maximum number of snow layers
   integer, parameter :: ngases      =   3     ! CH4, O2, & CO2
   integer, parameter :: nlevcan     =   1     ! number of leaf layers in canopy layer
   integer, parameter :: numwat      =   5     ! number of water types (soil, ice, 2 lakes, wetland)
