@@ -674,7 +674,7 @@ contains
                    !++ams
                    snow_density = wx / (frac_sno(c) * dz(c,j)) ! kg m^-3
                    grain_load_stress = max(denice / snow_density, 1._r8) * &
-                                       9.80665 * (burden(c) + wx/2._r8)
+                                       9.80665_r8 * (burden(c) + wx/2._r8)
                    ! kg m^-1 s^-2
 
                    ! set creep coefficient from Arthern et al. 2010 (Appendix B)
@@ -686,9 +686,9 @@ contains
                    endif
 
                    ddz2 = (-k_creep * (max(denice / snow_density, 1._r8) - 1._r8) * &
-                          exp(-60.0e3_r8 / (8.3143 * t_soisno(c,j))) * &
+                          exp(-60.e3_r8 / (8.3143_r8 * t_soisno(c,j))) * &
                           grain_load_stress) / &
-                                  ((snw_rds(c,j)*10.e-6) * (snw_rds(c,j)*10e-6))
+                                  (snw_rds(c,j)*1.e-6_r8 * snw_rds(c,j)*1.e-6_r8)
                    
                    ! Compaction occurring during melt
 
