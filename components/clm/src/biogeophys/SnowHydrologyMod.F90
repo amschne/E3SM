@@ -536,7 +536,7 @@ contains
 
    !-----------------------------------------------------------------------
    subroutine SnowCompaction(bounds, num_snowc, filter_snowc, &
-        temperature_vars, waterstate_vars)
+        temperature_vars, waterstate_vars, top_as_inst)
      !
      ! !DESCRIPTION:
      ! Determine the change in snow layer thickness due to compaction and
@@ -559,22 +559,37 @@ contains
      integer                , intent(in) :: filter_snowc(:) ! column filter for snow points
      type(temperature_type) , intent(in) :: temperature_vars
      type(waterstate_type)  , intent(in) :: waterstate_vars
+     type(topounit_atmospheric_state) , intent(in)   :: top_as_inst
      !
      ! !LOCAL VARIABLES:
-     integer :: j, l, c, fc                      ! indices
+     integer :: j, l, c, fc, t                ! indices
      real(r8):: dtime                            ! land model time step (sec)
      ! parameters
      real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
      real(r8), parameter :: c3 = 2.777e-6_r8     ! [1/s]
      real(r8), parameter :: c4 = 0.04_r8         ! [1/K]
      real(r8), parameter :: c5 = 2.0_r8          !
-     real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
+     !real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
+     !++ams higher upper limit for better fresh snow density
+     ! (VanKampenhout et al., 2017)
+     real(r8), parameter :: dm = 175.0_r8
      real(r8), parameter :: eta0 = 9.e+5_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
+     real(r8) :: grain_load_stress               ! snow grain load from overburden pressure [kg / m s^2]
+     real(r8) :: snow_density                    ! bulk layer snow density [kg /m^3]
+     real(r8) :: k_creep                         ! creep coefficient [m^3 s /kg]
+     !ams++     
      !
      real(r8) :: burden(bounds%begc:bounds%endc) ! pressure of overlying snow [kg/m2]
+     !++ams
+     real(r8) :: zpseudo(bounds%begc:bounds%endc) ! wind drift compaction / pseudo depth
+     logical  :: mobile(bounds%begc:bounds%endc)  ! current snow layer is mobile, i.e. susceptible to wind drift
+     !ams++     
      real(r8) :: ddz1                            ! Rate of settling of snowpack due to destructive metamorphism.
      real(r8) :: ddz2                            ! Rate of compaction of snowpack due to overburden.
      real(r8) :: ddz3                            ! Rate of compaction of snowpack due to melt [1/s]
+     !++ams
+     real(r8) :: ddz4   ! Rate of compaction of snowpack due to wind drift.
+     !ams++
      real(r8) :: dexpf                           ! expf=exp(-c4*(273.15-t_soisno)).
      real(r8) :: fi                              ! Fraction of ice relative to the total water content at current time step
      real(r8) :: td                              ! t_soisno - tfrz [K]
@@ -590,7 +605,10 @@ contains
           snl          => col_pp%snl                          , & ! Input:  [integer (:)    ] number of snow layers                     
           n_melt       => col_pp%n_melt                       , & ! Input:  [real(r8) (:)   ] SCA shape parameter                      
           ltype        => lun_pp%itype                        , & ! Input:  [integer (:)    ] landunit type                             
-
+          !++ams
+          forc_wind => top_as_inst%windbot                    , & ! Input:  [real(r8) (:) ]  atmospheric wind speed (m/s)
+          snw_rds      => waterstate_vars%snw_rds_col         , & ! Output: [real(r8) (:,:) ]  effective grain radius (col,lyr) [microns, m-6]
+          !ams++
           t_soisno     => temperature_vars%t_soisno_col    , & ! Input:  [real(r8) (:,:) ] soil temperature (Kelvin)              
           imelt        => temperature_vars%imelt_col       , & ! Input:  [integer (:,:)  ] flag for melting (=1), freezing (=2), Not=0
 
@@ -610,26 +628,27 @@ contains
        dtime = get_step_size()
 
        ! Begin calculation - note that the following column loops are only invoked if snl(c) < 0
+       !++ams
+       do fc = 1, num_snowc
+           c = filter_snowc(fc)
 
-       burden(bounds%begc : bounds%endc) = 0._r8
-
+           burden(c) = 0._r8
+           zpseudo(c) = 0._r8
+           mobile(c) = .true.
+       end do
+       !ams++
        do j = -nlevsno+1, 0
           do fc = 1, num_snowc
              c = filter_snowc(fc)
+             !++ams
+             !g = col_pp%gridcell(c)
+             t = col_pp%topounit(c)
+             !ams++ 
              if (j >= snl(c)+1) then
 
-                wx = h2osoi_ice(c,j) + h2osoi_liq(c,j)
-                void = 1._r8 - (h2osoi_ice(c,j)/denice + h2osoi_liq(c,j)/denh2o) / dz(c,j)
                 wx = (h2osoi_ice(c,j) + h2osoi_liq(c,j))
                 void = 1._r8 - (h2osoi_ice(c,j)/denice + h2osoi_liq(c,j)/denh2o)&
                      /(frac_sno(c) * dz(c,j))
-                ! If void is negative, then increase dz such that void = 0.
-                ! This should be done for any landunit, but for now is done only for glacier_mec 1andunits.
-                l = col_pp%landunit(c)
-                if (ltype(l)==istice_mec .and. void < 0._r8) then
-                   dz(c,j) = h2osoi_ice(c,j)/denice + h2osoi_liq(c,j)/denh2o
-                   void = 0._r8
-                endif
 
                 ! Allow compaction only for non-saturated node and higher ice lens node.
                 if (void > 0.001_r8 .and. h2osoi_ice(c,j) > .1_r8) then
@@ -649,9 +668,28 @@ contains
                    if (h2osoi_liq(c,j) > 0.01_r8*dz(c,j)*frac_sno(c)) ddz1=ddz1*c5
 
                    ! Compaction due to overburden
+                   !--ams
+                   !ddz2 = -(burden(c)+wx/2._r8)*exp(-0.08_r8*td - c2*bi)/eta0 
+                   !ams--
+                   !++ams
+                   snow_density = wx / (frac_sno(c) * dz(c,j)) ! kg m^-3
+                   grain_load_stress = max(denice / snow_density, 1._r8) * &
+                                       9.80665 * (burden(c) + wx/2._r8)
+                   ! kg m^-1 s^-2
 
-                   ddz2 = -(burden(c)+wx/2._r8)*exp(-0.08_r8*td - c2*bi)/eta0 
+                   ! set creep coefficient from Arthern et al. 2010 (Appendix B)
+                   if (snow_density <= 550._r8) then
+                      k_creep = 9.2e-9_r8 ! kg^-1 m^3 s
+                   endif
+                   if (snow_density > 550._r8) then
+                      k_creep = 3.7e-9_r8 ! kg^-1 m^3 s
+                   endif
 
+                   ddz2 = (-k_creep * (max(denice / snow_density, 1._r8) - 1._r8) * &
+                          exp(-60.0e3_r8 / (8.3143 * t_soisno(c,j))) * &
+                          grain_load_stress) / &
+                                  ((snw_rds(c,j)*10.e-6) * (snw_rds(c,j)*10e-6))
+                   
                    ! Compaction occurring during melt
 
                    if (imelt(c,j) == 1) then
@@ -673,15 +711,33 @@ contains
                    else
                       ddz3 = 0._r8
                    end if
-
+                   
+                   !++ams
+                   ! Compaction occurring due to wind drift
+                   call WindDriftCompaction( &
+                           bi = bi, &
+                           forc_wind = forc_wind(t), &
+                           dz = dz(c,j), &
+                           zpseudo = zpseudo(c), &
+                           mobile = mobile(c), &
+                           compaction_rate = ddz4)
+                   !ams++
                    ! Time rate of fractional change in dz (units of s-1)
 
-                   pdzdtc = ddz1 + ddz2 + ddz3
+                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4
 
                    ! The change in dz due to compaction
                    ! Limit compaction to be no greater than fully saturated layer thickness
 
                    dz(c,j) = max(dz(c,j) * (1._r8+pdzdtc*dtime),(h2osoi_ice(c,j)/denice+ h2osoi_liq(c,j)/denh2o)/frac_sno(c))
+                !++ams
+                else
+                    ! saturated node is immobile
+                    !
+                    ! This is only needed if wind_dependent_snow_density is 
+                    !true, but it's simplest just to update mobile always
+                    mobile(c) = .false.
+                !ams++                
                 end if
 
                 ! Pressure of overlying snow
@@ -1571,7 +1627,79 @@ contains
 
    end subroutine NewSnowBulkDensity
    !ams++ 
-   !-----------------------------------------------------------------------   
+      
+   !----------------------------------------------------------------------- 
+   !++ams
+   subroutine WindDriftCompaction(bi, forc_wind, dz, &
+        zpseudo, mobile, compaction_rate)
+     !
+     ! !DESCRIPTION:
+     !
+     ! Compute wind drift compaction for a single column and level.
+     !
+     ! Also updates zpseudo and mobile for this column. However, zpseudo remains unchanged
+     ! if mobile is already false or becomes false within this subroutine.
+     !
+     ! The structure of the updates done here for zpseudo and mobile requires that this
+     ! subroutine be called first for the top layer of snow, then for the 2nd layer down,
+     ! etc. - and finally for the bottom layer. Before beginning the loops over layers,
+     ! mobile should be initialized to .true. and zpseudo should be initialized to 0.
+     !
+     ! !USES:
+     !
+     ! !ARGUMENTS:
+     real(r8) , intent(in)    :: bi              ! partial density of ice [kg/m3]
+     real(r8) , intent(in)    :: forc_wind       ! atmospheric wind speed [m/s]
+     real(r8) , intent(in)    :: dz              ! layer depth for this column and level [m]
+     real(r8) , intent(inout) :: zpseudo         ! wind drift compaction / pseudo depth for this column at this layer
+     logical  , intent(inout) :: mobile          ! whether this snow column is still mobile at this layer (i.e., susceptible to wind drift)
+     real(r8) , intent(out)   :: compaction_rate ! rate of compaction of snowpack due to wind drift, for the current column and layer
+     !
+     ! !LOCAL VARIABLES:
+     real(r8) :: Frho        ! Mobility density factor [-]
+     real(r8) :: MO          ! Mobility index [-]
+     real(r8) :: SI          ! Driftability index [-]
+     real(r8) :: gamma_drift ! Scaling factor for wind drift time scale [-]
+     real(r8) :: tau_inverse ! Inverse of the effective time scale [1/s]
+
+     real(r8), parameter :: rho_min = 50._r8      ! wind drift compaction / minimum density [kg/m3]
+     real(r8), parameter :: rho_max = 350._r8     ! wind drift compaction / maximum density [kg/m3]
+     real(r8), parameter :: drift_gs = 0.35e-3_r8 ! wind drift compaction / grain size (fixed value for now)
+     real(r8), parameter :: drift_sph = 1.0_r8    ! wind drift compaction / sphericity
+     real(r8), parameter :: tau_ref = 48._r8 * 3600._r8  ! wind drift compaction / reference time [s]
+
+     character(len=*), parameter :: subname = 'WindDriftCompaction'
+     !-----------------------------------------------------------------------
+
+     if (mobile) then
+        Frho = 1.25_r8 - 0.0042_r8*(max(rho_min, bi)-rho_min)
+        ! assuming dendricity = 0, sphericity = 1, grain size = 0.35 mm Non-dendritic snow
+        MO = 0.34_r8 * (-0.583_r8*drift_gs - 0.833_r8*drift_sph + 0.833_r8) + 0.66_r8*Frho
+        SI = -2.868_r8 * exp(-0.085_r8*forc_wind) + 1._r8 + MO
+
+        if (SI > 0.0_r8) then
+           SI = min(SI, 3.25_r8)
+           ! Increase zpseudo (wind drift / pseudo depth) to the middle of
+           ! the pseudo-node for the sake of the following calculation
+           zpseudo = zpseudo + 0.5_r8 * dz * (3.25_r8 - SI)
+           gamma_drift = SI*exp(-zpseudo/0.1_r8)
+           tau_inverse = gamma_drift / tau_ref
+           compaction_rate = -max(0.0_r8, rho_max-bi) * tau_inverse
+           ! Further increase zpseudo to the bottom of the pseudo-node for
+           ! the sake of calculations done on the underlying layer (i.e.,
+           ! the next time through the j loop).
+           zpseudo = zpseudo + 0.5_r8 * dz * (3.25_r8 - SI)
+        else  ! SI <= 0
+           mobile = .false.
+           compaction_rate = 0._r8
+        end if
+     else  ! .not. mobile
+        compaction_rate = 0._r8
+     end if
+
+   end subroutine WindDriftCompaction
+   !ams++
+   
    subroutine Combo(dz,  wliq,  wice, t, dz2, wliq2, wice2, t2)
      !
      ! !DESCRIPTION:
