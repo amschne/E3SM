@@ -549,7 +549,7 @@ contains
      !
      ! !USES:
      use clm_time_manager, only : get_step_size
-     use clm_varcon      , only : denice, denh2o, tfrz, rpi
+     use clm_varcon      , only : denice, denh2o, tfrz, rpi, grav, rgas
      use landunit_varcon , only : istice_mec, istdlak, istsoil, istcrop
      use clm_varctl      , only : subgridflag
      !
@@ -565,18 +565,18 @@ contains
      integer :: j, l, c, fc, t                ! indices
      real(r8):: dtime                            ! land model time step (sec)
      ! parameters
-     real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
-     real(r8), parameter :: c3 = 2.777e-6_r8     ! [1/s]
+     !real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
+     real(r8), parameter :: c3 = 1.75e-6_r8     ! [1/s]
      real(r8), parameter :: c4 = 0.04_r8         ! [1/K]
      real(r8), parameter :: c5 = 2.0_r8          !
      !real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
-     !++ams higher upper limit for better fresh snow density
-     ! (VanKampenhout et al., 2017)
-     real(r8), parameter :: dm = 175.0_r8
-     real(r8), parameter :: eta0 = 9.e+5_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
-     real(r8) :: grain_load_stress               ! snow grain load from overburden pressure [kg / m s^2]
-     real(r8) :: snow_density                    ! bulk layer snow density [kg /m^3]
-     real(r8) :: k_creep                         ! creep coefficient [m^3 s /kg]
+     !++ams upper limit for better fresh snow density
+     ! reverting back to correct value (Anderson, 1976)
+     real(r8), parameter :: dm = 150.0_r8
+     !real(r8), parameter :: eta0 = 9.e+5_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
+     !real(r8) :: grain_load_stress               ! snow grain load from overburden pressure [kg / m s^2]
+     !real(r8) :: snow_density                    ! bulk layer snow density [kg /m^3]
+     !real(r8) :: k_creep                         ! creep coefficient [m^3 s /kg]
      !ams++     
      !
      real(r8) :: burden(bounds%begc:bounds%endc) ! pressure of overlying snow [kg/m2]
@@ -672,23 +672,12 @@ contains
                    !ddz2 = -(burden(c)+wx/2._r8)*exp(-0.08_r8*td - c2*bi)/eta0 
                    !ams--
                    !++ams
-                   snow_density = wx / (frac_sno(c) * dz(c,j)) ! kg m^-3
-                   grain_load_stress = max(denice / snow_density, 1._r8) * &
-                                       9.80665_r8 * (burden(c) + wx/2._r8)
-                   ! kg m^-1 s^-2
-
-                   ! set creep coefficient from Arthern et al. 2010 (Appendix B)
-                   if (snow_density <= 550._r8) then
-                      k_creep = 9.2e-9_r8 ! kg^-1 m^3 s
-                   endif
-                   if (snow_density > 550._r8) then
-                      k_creep = 3.7e-9_r8 ! kg^-1 m^3 s
-                   endif
-
-                   ddz2 = (-k_creep * (max(denice / snow_density, 1._r8) - 1._r8) * &
-                          exp(-60.e3_r8 / (8.3143_r8 * t_soisno(c,j))) * &
-                          grain_load_stress) / &
-                                  (snw_rds(c,j)*1.e-6_r8 * snw_rds(c,j)*1.e-6_r8)
+                   !snow_density = wx / (frac_sno(c) * dz(c,j)) ! kg m^-3
+                   
+                   ddz2 = -7.7e-3_r8 * (3._r8 / (920._r8 * snw_rds(c,j)*1.e-6_r8)) * &
+                          sqrt(grav * (burden(c) + wx/2._r8) * bi) * &
+                          (920._r8 / bi - 1._r8)**5._r8 * &
+                          exp(-60.e6_r8 / (rgas * t_soisno(c,j))) - 0.352e-9_r8 ! small offset
                    
                    ! Compaction occurring during melt
 
