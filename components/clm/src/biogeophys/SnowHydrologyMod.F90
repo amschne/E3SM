@@ -566,14 +566,14 @@ contains
      real(r8):: dtime                            ! land model time step (sec)
      ! parameters
      !real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
-     real(r8), parameter :: c3 = 1.75e-6_r8     ! [1/s]
+     real(r8), parameter :: c3 = 2.0e-8_r8     ! [1/s]
      real(r8), parameter :: c4 = 0.04_r8         ! [1/K]
      real(r8), parameter :: c5 = 2.0_r8          !
      !real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
      !++ams upper limit for better fresh snow density
      ! reverting back to correct value (Anderson, 1976)
      real(r8), parameter :: dm = 150.0_r8
-     !real(r8), parameter :: eta0 = 9.e+5_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
+     !real(r8), parameter :: eta0 = 7.62237e6_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
      !real(r8) :: grain_load_stress               ! snow grain load from overburden pressure [kg / m s^2]
      !real(r8) :: snow_density                    ! bulk layer snow density [kg /m^3]
      !real(r8) :: k_creep                         ! creep coefficient [m^3 s /kg]
@@ -583,7 +583,9 @@ contains
      !++ams
      real(r8) :: zpseudo(bounds%begc:bounds%endc) ! wind drift compaction / pseudo depth
      logical  :: mobile(bounds%begc:bounds%endc)  ! current snow layer is mobile, i.e. susceptible to wind drift
-     !ams++     
+     !ams++
+     real(r8) :: snw_ssa
+     real(r8) :: ddz1_fresh 	 
      real(r8) :: ddz1                            ! Rate of settling of snowpack due to destructive metamorphism.
      real(r8) :: ddz2                            ! Rate of compaction of snowpack due to overburden.
      real(r8) :: ddz3                            ! Rate of compaction of snowpack due to melt [1/s]
@@ -657,12 +659,17 @@ contains
                    fi = h2osoi_ice(c,j) / wx
                    td = tfrz-t_soisno(c,j)
                    dexpf = exp(-c4*td)
+                   snw_ssa = 3.e6_r8 / (denice * snw_rds(c,j)) ! m^2 kg^-1
 
                    ! Settling as a result of destructive metamorphism
+                   ddz1_fresh = (-grav * (burden(c) + wx/2._r8)) / &
+                                (0.007 * bi**(4.75 + td/40._r8))
+                   
+                   if (snw_ssa < 50._r8) ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))				   
+				   ddz1 = -c3*dexpf
+                   if (bi > dm) ddz1 = ddz1*exp(-12.5e-3_r8*(bi-dm))
 
-                   ddz1 = -c3*dexpf
-                   if (bi > dm) ddz1 = ddz1*exp(-46.0e-3_r8*(bi-dm))
-
+                   ddz1 = ddz1 + ddz1_fresh
                    ! Liquid water term
 
                    if (h2osoi_liq(c,j) > 0.01_r8*dz(c,j)*frac_sno(c)) ddz1=ddz1*c5
@@ -672,12 +679,18 @@ contains
                    !ddz2 = -(burden(c)+wx/2._r8)*exp(-0.08_r8*td - c2*bi)/eta0 
                    !ams--
                    !++ams
-                   !snow_density = wx / (frac_sno(c) * dz(c,j)) ! kg m^-3
-                   
-                   ddz2 = -7.7e-3_r8 * (3._r8 / (920._r8 * snw_rds(c,j)*1.e-6_r8)) * &
-                          sqrt(grav * (burden(c) + wx/2._r8) * bi) * &
-                          (920._r8 / bi - 1._r8)**5._r8 * &
-                          exp(-60.e6_r8 / (rgas * t_soisno(c,j))) - 0.352e-9_r8 ! small offset
+                   ddz2 = OverburdenCompactionVionnet2012( &
+                                                h2osoi_liq = h2osoi_liq(c,j), &
+                                                dz = dz(c,j), &
+                                                burden = burden(c), &
+                                                wx = wx, &
+                                                td = td, &
+                                                bi = bi)
+                    !ams++
+				   !ddz2 = -7.7e-3_r8 * (3._r8 / (920._r8 * snw_rds(c,j)*1.e-6_r8)) * &
+                    !      sqrt(grav * (burden(c) + wx/2._r8) * bi) * &
+                    !      (920._r8 / bi - 1._r8)**5._r8 * &
+                    !      exp(-60.e6_r8 / (rgas * t_soisno(c,j))) - 0.352e-9_r8 ! small offset
                    
                    ! Compaction occurring during melt
 
@@ -713,7 +726,7 @@ contains
                    !ams++
                    ! Time rate of fractional change in dz (units of s-1)
 
-                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4
+                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4 - 9.3e-11_r8 ! small offset                   
 
                    ! The change in dz due to compaction
                    ! Limit compaction to be no greater than fully saturated layer thickness
@@ -1617,6 +1630,54 @@ contains
    end subroutine NewSnowBulkDensity
    !ams++ 
       
+   !++ams
+   function OverburdenCompactionVionnet2012(h2osoi_liq, dz, burden, wx, td, bi) &
+        result(compaction_rate)
+     !
+     ! !DESCRIPTION:
+     ! Compute snow overburden compaction for a single column and level using the Vionnet
+     ! et al. 2012 formula
+     !
+     ! From Vionnet V et al. 2012, "The detailed snowpack scheme Crocus and its
+     ! implementation in SURFEX v7.2", Geosci. Model Dev. 5, 773–791.
+     !
+     ! Preconditions (required to avoid divide by 0):
+     ! - dz > 0
+     ! - bi > 0
+     !
+     ! !USES:
+     use clm_varcon, only : denh2o
+     !
+     ! !ARGUMENTS:
+     real(r8) :: compaction_rate ! function result
+     real(r8) , intent(in) :: h2osoi_liq ! liquid water in this column and level [kg/m2]
+     real(r8) , intent(in) :: dz         ! layer depth for this column and level [m]
+     real(r8) , intent(in) :: burden     ! pressure of overlying snow in this column [kg/m2]
+     real(r8) , intent(in) :: wx         ! water mass (ice+liquid) [kg/m2]
+     real(r8) , intent(in) :: td         ! t_soisno - tfrz [K]
+     real(r8) , intent(in) :: bi         ! partial density of ice [kg/m3]
+     !
+     ! !LOCAL VARIABLES:
+     real(r8) :: f1, f2                          ! overburden compaction modifiers to viscosity
+     real(r8) :: eta                             ! Viscosity
+
+     real(r8), parameter :: ceta = 450._r8       ! overburden compaction constant [kg/m3]
+     real(r8), parameter :: aeta = 0.1_r8        ! overburden compaction constant [1/K]
+     real(r8), parameter :: beta = 0.023_r8      ! overburden compaction constant [m3/kg]
+     real(r8), parameter :: eta0 = 7.62237e6_r8  ! The Viscosity Coefficient Eta0 [kg-s/m2]
+
+     character(len=*), parameter :: subname = 'OverburdenCompactionVionnet2012'
+     !-----------------------------------------------------------------------
+
+     f1 = 1._r8 / (1._r8 + 60._r8 * h2osoi_liq / (denh2o * dz))
+     !f2 = 4.0_r8 ! currently fixed to maximum value, holds in absence of angular grains
+	 f2 = 2.5e-2_r8 ! experimental value
+     eta = f1*f2*(bi/ceta)*exp(aeta*td + beta*bi)*eta0
+     compaction_rate = -(burden+wx/2._r8) / eta
+
+   end function OverburdenCompactionVionnet2012
+   !ams++	  
+	  
    !----------------------------------------------------------------------- 
    !++ams
    subroutine WindDriftCompaction(bi, forc_wind, dz, &
