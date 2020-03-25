@@ -566,7 +566,7 @@ contains
      real(r8):: dtime                            ! land model time step (sec)
      ! parameters
      !real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
-     real(r8), parameter :: c3 = 2.0e-8_r8     ! [1/s]
+     real(r8), parameter :: c3 = 8.3e-7_r8     ! [1/s]
      real(r8), parameter :: c4 = 0.04_r8         ! [1/K]
      real(r8), parameter :: c5 = 2.0_r8          !
      !real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
@@ -585,7 +585,7 @@ contains
      logical  :: mobile(bounds%begc:bounds%endc)  ! current snow layer is mobile, i.e. susceptible to wind drift
      !ams++
      real(r8) :: snw_ssa
-     real(r8) :: ddz1_fresh 	 
+     real(r8) :: ddz1_fresh 
      real(r8) :: ddz1                            ! Rate of settling of snowpack due to destructive metamorphism.
      real(r8) :: ddz2                            ! Rate of compaction of snowpack due to overburden.
      real(r8) :: ddz3                            ! Rate of compaction of snowpack due to melt [1/s]
@@ -594,7 +594,7 @@ contains
      !ams++
      real(r8) :: dexpf                           ! expf=exp(-c4*(273.15-t_soisno)).
      real(r8) :: fi                              ! Fraction of ice relative to the total water content at current time step
-     real(r8) :: td                              ! t_soisno - tfrz [K]
+     real(r8) :: td                              ! tfrz -t_soisno [K]
      real(r8) :: pdzdtc                          ! Nodal rate of change in fractional-thickness due to compaction [fraction/s]
      real(r8) :: void                            ! void (1 - vol_ice - vol_liq)
      real(r8) :: wx                              ! water mass (ice+liquid) [kg/m2]
@@ -658,16 +658,17 @@ contains
                    bi = h2osoi_ice(c,j) / (frac_sno(c) * dz(c,j))
                    fi = h2osoi_ice(c,j) / wx
                    td = tfrz-t_soisno(c,j)
-                   dexpf = exp(-c4*td)
                    snw_ssa = 3.e6_r8 / (denice * snw_rds(c,j)) ! m^2 kg^-1
 
                    ! Settling as a result of destructive metamorphism
                    ddz1_fresh = (-grav * (burden(c) + wx/2._r8)) / &
                                 (0.007 * bi**(4.75 + td/40._r8))
                    
-                   if (snw_ssa < 50._r8) ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))				   
-				   ddz1 = -c3*dexpf
-                   if (bi > dm) ddz1 = ddz1*exp(-12.5e-3_r8*(bi-dm))
+                   if (snw_ssa < 50._r8) ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))
+                   
+                   dexpf = exp(-c4*td)
+                   ddz1 = -c3*dexpf
+                   if (bi > dm) ddz1 = ddz1*exp(-46.0e-3_r8*(bi-dm))
 
                    ddz1 = ddz1 + ddz1_fresh
                    ! Liquid water term
@@ -687,7 +688,7 @@ contains
                                                 td = td, &
                                                 bi = bi)
                     !ams++
-				   !ddz2 = -7.7e-3_r8 * (3._r8 / (920._r8 * snw_rds(c,j)*1.e-6_r8)) * &
+                    !ddz2 = -7.7e-3_r8 * (3._r8 / (920._r8 * snw_rds(c,j)*1.e-6_r8)) * &
                     !      sqrt(grav * (burden(c) + wx/2._r8) * bi) * &
                     !      (920._r8 / bi - 1._r8)**5._r8 * &
                     !      exp(-60.e6_r8 / (rgas * t_soisno(c,j))) - 0.352e-9_r8 ! small offset
@@ -726,7 +727,7 @@ contains
                    !ams++
                    ! Time rate of fractional change in dz (units of s-1)
 
-                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4 - 9.3e-11_r8 ! small offset                   
+                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4 - 1.18e-10_r8 ! small offset                   
 
                    ! The change in dz due to compaction
                    ! Limit compaction to be no greater than fully saturated layer thickness
@@ -1654,7 +1655,7 @@ contains
      real(r8) , intent(in) :: dz         ! layer depth for this column and level [m]
      real(r8) , intent(in) :: burden     ! pressure of overlying snow in this column [kg/m2]
      real(r8) , intent(in) :: wx         ! water mass (ice+liquid) [kg/m2]
-     real(r8) , intent(in) :: td         ! t_soisno - tfrz [K]
+     real(r8) , intent(in) :: td         ! tfrz - t_soisno [K]
      real(r8) , intent(in) :: bi         ! partial density of ice [kg/m3]
      !
      ! !LOCAL VARIABLES:
@@ -1671,13 +1672,13 @@ contains
 
      f1 = 1._r8 / (1._r8 + 60._r8 * h2osoi_liq / (denh2o * dz))
      !f2 = 4.0_r8 ! currently fixed to maximum value, holds in absence of angular grains
-	 f2 = 2.5e-2_r8 ! experimental value
+     f2 = 4.9_r8 ! experimental value
      eta = f1*f2*(bi/ceta)*exp(aeta*td + beta*bi)*eta0
      compaction_rate = -(burden+wx/2._r8) / eta
 
    end function OverburdenCompactionVionnet2012
    !ams++	  
-	  
+  
    !----------------------------------------------------------------------- 
    !++ams
    subroutine WindDriftCompaction(bi, forc_wind, dz, &
