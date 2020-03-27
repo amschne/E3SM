@@ -88,18 +88,15 @@ module SnowHydrologyMod
   ! Hardcoded maximum of 16 snowlayers, this is checked elsewhere (controlMod.F90)
   ! The bottom layer has no limit on thickness, hence the last element of the dzmax_*
   ! arrays is 'huge'.
-  real(r8), parameter :: dzmin(16) = &      ! minimum of top snow layer
+  real(r8), parameter :: dzmin(12) = &       ! minimum of top snow layer
                (/ 0.010_r8, 0.015_r8, 0.025_r8, 0.055_r8, 0.115_r8, 0.235_r8, &
-                  0.475_r8, 0.955_r8, 1.915_r8, 1.915_r8, 1.915_r8, 1.915_r8, &
-                  1.915_r8, 1.915_r8, 1.915_r8, 1.915_r8 /)
-  real(r8), parameter :: dzmax_l(16) = &    ! maximum thickness of layer when no layers beneath
+                  0.475_r8, 0.955_r8, 1.915_r8, 3.835_r8, 7.675_r8, 15.355_r8 /)
+  real(r8), parameter :: dzmax_l(12) = &     ! maximum thickness of layer when no layers beneath
                (/ 0.03_r8, 0.07_r8, 0.18_r8, 0.41_r8, 0.88_r8, 1.83_r8, &
-                  3.74_r8, 7.57_r8, 15.24_r8, 15.24_r8, 15.24_r8, 15.24_r8, &
-                  15.24_r8, 15.24_r8, 15.24_r8, huge(1._r8)  /)
-  real(r8), parameter :: dzmax_u(16) = &    ! maximum thickness of layer when layers beneath
+                  3.74_r8, 7.57_r8, 15.24_r8, 30.59_r8, 61.3_r8, huge(1._r8)  /)
+  real(r8), parameter :: dzmax_u(12) = &     ! maximum thickness of layer when layers beneath
                (/ 0.02_r8, 0.05_r8, 0.11_r8, 0.23_r8, 0.47_r8, 0.95_r8, &
-                  1.91_r8, 3.83_r8, 7.67_r8, 7.67_r8, 7.67_r8, 7.67_r8, & 
-                  7.67_r8, 7.67_r8, 7.67_r8, huge(1._r8)  /)
+                  1.91_r8, 3.83_r8, 7.67_r8, 15.35_r8, 30.71_r8, huge(1._r8)  /)
   !ams++
 
 contains
@@ -566,13 +563,12 @@ contains
      real(r8):: dtime                            ! land model time step (sec)
      ! parameters
      !real(r8), parameter :: c2 = 23.e-3_r8       ! [m3/kg]
-     real(r8), parameter :: c3 = 8.3e-7_r8     ! [1/s]
+     real(r8), parameter :: c3 = 2.777e-6_r8     ! [1/s]
      real(r8), parameter :: c4 = 0.04_r8         ! [1/K]
      real(r8), parameter :: c5 = 2.0_r8          !
      !real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
      !++ams upper limit for better fresh snow density
-     ! reverting back to correct value (Anderson, 1976)
-     real(r8), parameter :: dm = 150.0_r8
+     real(r8), parameter :: dm = 100.0_r8
      !real(r8), parameter :: eta0 = 7.62237e6_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
      !real(r8) :: grain_load_stress               ! snow grain load from overburden pressure [kg / m s^2]
      !real(r8) :: snow_density                    ! bulk layer snow density [kg /m^3]
@@ -584,8 +580,8 @@ contains
      real(r8) :: zpseudo(bounds%begc:bounds%endc) ! wind drift compaction / pseudo depth
      logical  :: mobile(bounds%begc:bounds%endc)  ! current snow layer is mobile, i.e. susceptible to wind drift
      !ams++
-     real(r8) :: snw_ssa
-     real(r8) :: ddz1_fresh 
+     !real(r8) :: snw_ssa
+     !real(r8) :: ddz1_fresh 
      real(r8) :: ddz1                            ! Rate of settling of snowpack due to destructive metamorphism.
      real(r8) :: ddz2                            ! Rate of compaction of snowpack due to overburden.
      real(r8) :: ddz3                            ! Rate of compaction of snowpack due to melt [1/s]
@@ -658,19 +654,19 @@ contains
                    bi = h2osoi_ice(c,j) / (frac_sno(c) * dz(c,j))
                    fi = h2osoi_ice(c,j) / wx
                    td = tfrz-t_soisno(c,j)
-                   snw_ssa = 3.e6_r8 / (denice * snw_rds(c,j)) ! m^2 kg^-1
+                   !snw_ssa = 3.e6_r8 / (denice * snw_rds(c,j)) ! m^2 kg^-1
 
                    ! Settling as a result of destructive metamorphism
-                   ddz1_fresh = (-grav * (burden(c) + wx/2._r8)) / &
-                                (0.007 * bi**(4.75 + td/40._r8))
+                   !ddz1_fresh = (-grav * (burden(c) + wx/2._r8)) / &
+                   !             (0.007 * bi**(4.75 + td/40._r8))
                    
-                   if (snw_ssa < 50._r8) ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))
+                   !if (snw_ssa < 50._r8) ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))
                    
                    dexpf = exp(-c4*td)
                    ddz1 = -c3*dexpf
                    if (bi > dm) ddz1 = ddz1*exp(-46.0e-3_r8*(bi-dm))
 
-                   ddz1 = ddz1 + ddz1_fresh
+                   !ddz1 = ddz1 + ddz1_fresh
                    ! Liquid water term
 
                    if (h2osoi_liq(c,j) > 0.01_r8*dz(c,j)*frac_sno(c)) ddz1=ddz1*c5
@@ -727,7 +723,7 @@ contains
                    !ams++
                    ! Time rate of fractional change in dz (units of s-1)
 
-                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4 - 1.18e-10_r8 ! small offset                   
+                   pdzdtc = ddz1 + ddz2 + ddz3 + ddz4
 
                    ! The change in dz due to compaction
                    ! Limit compaction to be no greater than fully saturated layer thickness
@@ -1671,8 +1667,8 @@ contains
      !-----------------------------------------------------------------------
 
      f1 = 1._r8 / (1._r8 + 60._r8 * h2osoi_liq / (denh2o * dz))
-     !f2 = 4.0_r8 ! currently fixed to maximum value, holds in absence of angular grains
-     f2 = 4.9_r8 ! experimental value
+     f2 = 4.0_r8 ! currently fixed to maximum value, holds in absence of angular grains
+     !f2 = 4.9_r8 ! experimental value
      eta = f1*f2*(bi/ceta)*exp(aeta*td + beta*bi)*eta0
      compaction_rate = -(burden+wx/2._r8) / eta
 
