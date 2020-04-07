@@ -398,26 +398,28 @@ contains
          ptr_col=this%qflx_snofrz_col, set_lake=spval, c2l_scale_type='urbanf', &
          default='inactive')
 
-    if (create_glacier_mec_landunit) then
-       this%qflx_glcice_col(begc:endc) = spval
-       call hist_addfld1d (fname='QICE',  units='mm/s',  &
-            avgflag='A', long_name='ice growth/melt', &
-            ptr_col=this%qflx_glcice_col, l2g_scale_type='ice')
-    end if
+    !++ams Forcing on QICE diagnostics
+    !if (create_glacier_mec_landunit) then
+    this%qflx_glcice_col(begc:endc) = spval
+    call hist_addfld1d (fname='QICE',  units='mm/s',  &
+         avgflag='A', long_name='ice growth/melt', &
+         ptr_col=this%qflx_glcice_col, l2g_scale_type='ice')
+    !end if
 
-    if (create_glacier_mec_landunit) then
-       this%qflx_glcice_frz_col(begc:endc) = spval
-       call hist_addfld1d (fname='QICE_FRZ',  units='mm/s',  &
-            avgflag='A', long_name='ice growth', &
-            ptr_col=this%qflx_glcice_frz_col, l2g_scale_type='ice')
-    end if
+    !if (create_glacier_mec_landunit) then
+    this%qflx_glcice_frz_col(begc:endc) = spval
+    call hist_addfld1d (fname='QICE_FRZ',  units='mm/s',  &
+         avgflag='A', long_name='ice growth', &
+         ptr_col=this%qflx_glcice_frz_col, l2g_scale_type='ice')
+    !end if
 
-    if (create_glacier_mec_landunit) then
-       this%qflx_glcice_melt_col(begc:endc) = spval
-       call hist_addfld1d (fname='QICE_MELT',  units='mm/s',  &
-            avgflag='A', long_name='ice melt', &
-            ptr_col=this%qflx_glcice_melt_col, l2g_scale_type='ice')
-    end if
+    !if (create_glacier_mec_landunit) then
+    this%qflx_glcice_melt_col(begc:endc) = spval
+    call hist_addfld1d (fname='QICE_MELT',  units='mm/s',  &
+         avgflag='A', long_name='ice melt', &
+         ptr_col=this%qflx_glcice_melt_col, l2g_scale_type='ice')
+    !end if
+    !ams++
 
     this%qflx_irrig_patch(begp:endp) = spval
     call hist_addfld1d (fname='QIRRIG', units='mm/s', &

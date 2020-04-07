@@ -50,6 +50,7 @@ module clm_instMod
   use VegetationPropertiesType   , only : veg_vp             ! Ecophysical Constants
   use SoilorderConType           , only : soilordercon         ! Constants
 
+  use GridcellType               , only : grc_pp
   use LandunitType               , only : lun_pp
   use ColumnType                 , only : col_pp
   use VegetationType             , only : veg_pp
@@ -264,22 +265,36 @@ contains
     allocate (snow_depth_col(begc:endc))
 
     ! snow water
-    ! Note: Glacier_mec columns are initialized with half the maximum snow cover.
-    ! This gives more realistic values of qflx_glcice sooner in the simulation
-    ! for columns with net ablation, at the cost of delaying ice formation
-    ! in columns with net accumulation.
+    ! Note:
+    !++ams (from CESM2.0)
+    ! In areas that should be snow-covered, it can be problematic to start with 0 snow
+    ! cover, because this can affect the long-term state through soil heating, albedo
+    ! feedback, etc. On the other hand, we would introduce hysteresis by putting too
+    ! much snow in places that are in a net melt regime, because the melt-albedo
+    ! feedback may not activate on time (or at all). So, as a compromise, we start with
+    ! a small amount of snow in places that are likely to be snow-covered for much or
+    ! all of the year.
     do c = begc,endc
        l = col_pp%landunit(c)
        g = col_pp%gridcell(c)
 
-       if (lun_pp%itype(l)==istice) then
-          h2osno_col(c) = h2osno_max
-       elseif (lun_pp%itype(l)==istice_mec .or. &
-              (lun_pp%itype(l)==istsoil .and. ldomain%glcmask(g) > 0._r8)) then
+       !--ams
+       !if (lun_pp%itype(l)==istice) then
+       !   h2osno_col(c) = h2osno_max
+       !elseif (lun_pp%itype(l)==istice_mec .or. &
+       !       (lun_pp%itype(l)==istsoil .and. ldomain%glcmask(g) > 0._r8)) then
           ! Initialize a non-zero snow thickness where the ice sheet can/potentially operate.
           ! Using glcmask to capture all potential vegetated points around GrIS (ideally
           ! we would use icemask from CISM, but that isn't available until after initialization.)
-          h2osno_col(c) = 1.0_r8 * h2osno_max   ! start with full snow column so +SMB can begin immediately
+       !   h2osno_col(c) = 1.0_r8 * h2osno_max   ! start with full snow column so +SMB can begin immediately
+       !ams--
+       if (lun_pp%itype(l)==istice .or. lun_pp%itype(l)==istice_mec) then
+          ! land ice (including multiple elevation classes, i.e. glacier_mec) 
+          h2osno_col(c) = 50._r8
+       else if (lun_pp%itype(l)==istsoil .and. grc_pp%latdeg(g) >= 44._r8) then
+          ! Northern hemisphere seasonal snow
+          h2osno_col(c) = 50._r8
+       !ams++
        else
           h2osno_col(c) = 0._r8
        endif

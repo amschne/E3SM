@@ -348,10 +348,20 @@ contains
          avgflag='A', long_name='soil liquid water (vegetated landunits only)', &
          ptr_col=this%h2osoi_liq_col, l2g_scale_type='veg')
 
+    this%h2osoi_liq_col(begc:endc,:) = spval
+    call hist_addfld2d (fname='SOILLIQ_ICE',  units='kg/m2', type2d='levgrnd', &
+         avgflag='A', long_name='soil liquid water (ice landunits only)', &
+        ptr_col=this%h2osoi_liq_col, l2g_scale_type='ice')
+
     this%h2osoi_ice_col(begc:endc,:) = spval
     call hist_addfld2d (fname='SOILICE',  units='kg/m2', type2d='levgrnd', &
          avgflag='A', long_name='soil ice (vegetated landunits only)', &
          ptr_col=this%h2osoi_ice_col, l2g_scale_type='veg')
+
+    this%h2osoi_ice_col(begc:endc,:) = spval
+    call hist_addfld2d (fname='SOILICE_ICE',  units='kg/m2', type2d='levgrnd', &
+         avgflag='A', long_name='soil ice (ice landunits only)', &
+         ptr_col=this%h2osoi_ice_col, l2g_scale_type='ice')
 
     this%h2osoi_liqice_10cm_col(begc:endc) = spval
     call hist_addfld1d (fname='SOILWATER_10CM',  units='kg/m2', &
