@@ -6,7 +6,7 @@ module clm_varpar
   !
   ! !USES:
   use shr_kind_mod , only: r8 => shr_kind_r8
-  use clm_varctl   , only: use_extralakelayers, use_vertsoilc, use_crop, use_betr
+  use clm_varctl   , only: use_extralakelayers, use_extrasnowlayers, use_vertsoilc, use_crop, use_betr
   use clm_varctl   , only: use_century_decomp, use_c13, use_c14, use_fates
   use clm_varctl   , only: iulog, create_crop_landunit, irrigate
   use clm_varctl   , only: use_vichydro
@@ -33,7 +33,7 @@ module clm_varpar
   integer            :: nlevtrc_soil
   integer            :: nlevtrc_full
   
-  integer, parameter :: nlevsno     =   5     ! maximum number of snow layers
+  integer            :: nlevsno                ! maximum number of snow layers
   integer, parameter :: ngases      =   3     ! CH4, O2, & CO2
   integer, parameter :: nlevcan     =   1     ! number of leaf layers in canopy layer
   integer, parameter :: nvegwcs     =   4     ! number of vegetation water conductance segments
@@ -175,6 +175,12 @@ contains
     else
        nlevlak     =  25     ! number of lake layers (Yields better results for site simulations)
     end if
+	
+    if (.not. use_extrasnowlayers) then
+       nlevsno     =  5     ! maximum number of snow layers
+    else
+       nlevsno     =  16    ! maximum number of snow layers (for firn model)
+    end if	
 
     if ( use_fates ) then
        i_cwd = 0
