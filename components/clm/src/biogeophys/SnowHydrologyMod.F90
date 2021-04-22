@@ -675,8 +675,8 @@ contains
                       if (snw_ssa < 50._r8) then
                           ddz1_fresh = ddz1_fresh * exp(-46.e-2_r8 * (50._r8 - snw_ssa))
                       endif
-                      ddz1 = -c3_ams*dexpf
-                      if (bi > rho_dm) ddz1 = ddz1*exp(-46.0e-3_r8*(bi-rho_dm))
+                      ddz1 = -c3*dexpf
+                      if (bi > rho_dm) ddz1 = ddz1*exp(-230.0e-3_r8*(bi-rho_dm))
                       ddz1 = ddz1 + ddz1_fresh
                    endif
 
@@ -693,12 +693,12 @@ contains
                          ddz2 = (-k_creep_snow * (max(denice / bi, 1._r8) - 1._r8) * &
                                  exp(-60.e6_r8 / (rgas * t_soisno(c,j))) * p_gls) / &
                                  (snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8) - &
-                                 2.02e-10_r8
+                                 2.23e-10_r8
                       else ! High density, i.e. firn
                          ddz2 = (-k_creep_firn * (max(denice / bi, 1._r8) - 1._r8) * &
                                  exp(-60.e6_r8 / (rgas * t_soisno(c,j))) * p_gls) / &
                                  (snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8) - &
-                                 2.7e-11_r8
+                                 2.98e-11_r8
                       endif
                    endif
 
