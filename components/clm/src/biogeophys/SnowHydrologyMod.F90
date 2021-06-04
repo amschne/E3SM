@@ -572,8 +572,8 @@ contains
      real(r8), parameter :: dm = 100.0_r8        ! Upper Limit on Destructive Metamorphism Compaction [kg/m3]
      real(r8), parameter :: rho_dm = 150.0_r8    ! Upper limit on destructive metamorphism compaction [kg/m3] (Anderson, 1976; Schneider et al., 2020)
      real(r8), parameter :: eta0 = 9.e+5_r8      ! The Viscosity Coefficient Eta0 [kg-s/m2]
-     real(r8), parameter :: k_creep_snow = 2.32e-9_r8 ! Creep coefficient for snow (bi < 550 kg / m3) [m3-s/kg]
-     real(r8), parameter :: k_creep_firn = 1.23e-9_r8 ! Creep coefficient for firn (bi > 550 kg / m3)
+     real(r8), parameter :: k_creep_snow = 7.57e-15_r8 ! Creep coefficient for snow (bi < 550 kg / m3) [m4-s/kg]
+     real(r8), parameter :: k_creep_firn = 1.28e-9_r8 ! Creep coefficient for firn (bi > 550 kg / m3) [m3-s/kg]
      !
      real(r8) :: p_gls                           ! grain load stress [kg / m-s2]
      real(r8) :: burden(bounds%begc:bounds%endc) ! pressure of overlying snow [kg/m2]
@@ -691,14 +691,14 @@ contains
                       p_gls = max(denice / bi, 1._r8) * grav * (burden(c) + wx/2._r8)
                       if (bi <= 550._r8) then ! Low density, i.e. snow
                          ddz2 = (-k_creep_snow * (max(denice / bi, 1._r8) - 1._r8) * &
-                                 exp(-60.e6_r8 / (rgas * t_soisno(c,j))) * p_gls) / &
-                                 (snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8) - &
-                                 6.14e-11_r8
+                                 exp(-50.e6_r8 / (rgas * t_soisno(c,j))) * p_gls) / &
+                                 (snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8) - &
+                                 7.2e-11_r8
                       else ! High density, i.e. firn
                          ddz2 = (-k_creep_firn * (max(denice / bi, 1._r8) - 1._r8) * &
                                  exp(-60.e6_r8 / (rgas * t_soisno(c,j))) * p_gls) / &
                                  (snw_rds(c,j) * 1.e-6_r8 * snw_rds(c,j) * 1.e-6_r8) - &
-                                 2.93e-11_r8
+                                 3.24e-11_r8
                       endif
                    endif
 
